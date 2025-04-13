@@ -35,21 +35,39 @@ def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
      
      return train_gen, val_gen
 def get_model(kernel_size=(3,3), pool_size=(4,4), first_filters=32, second_filters=64):
+     from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
+     from keras.optimizers import SGD
 
-
-     # build the model
      model = Sequential()
 
-     model.add(Conv2D(first_filters, kernel_size, activation = 'relu', padding = 'same', input_shape = (IMAGE_SIZE, IMAGE_SIZE, 3)))
-     model.add(MaxPool2D(pool_size = pool_size)) 
+     # First Convolutional Block
+     model.add(Conv2D(64, (3, 3), activation='relu', padding='same', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)))
+     model.add(BatchNormalization())
+     model.add(MaxPooling2D(pool_size=(2, 2)))
 
-     model.add(Conv2D(second_filters, kernel_size, activation = 'relu', padding = 'same'))
-     model.add(MaxPool2D(pool_size = pool_size))
+     # Second Convolutional Block
+     model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
+     model.add(BatchNormalization())
+     model.add(MaxPooling2D(pool_size=(2, 2)))
 
+     # Third Convolutional Block
+     model.add(Conv2D(256, (3, 3), activation='relu', padding='same'))
+     model.add(BatchNormalization())
+     model.add(MaxPooling2D(pool_size=(2, 2)))
+
+     # Fourth Convolutional Block
+     model.add(Conv2D(512, (3, 3), activation='relu', padding='same'))
+     model.add(BatchNormalization())
+     model.add(MaxPooling2D(pool_size=(2, 2)))
+
+     # Flatten and Dense Layers
      model.add(Flatten())
-     model.add(Dense(64, activation = 'relu'))
-     model.add(Dense(1, activation = 'sigmoid'))
-     
+     model.add(Dense(1024, activation='relu'))
+     model.add(Dropout(0.5))
+     model.add(Dense(512, activation='relu'))
+     model.add(Dropout(0.5))
+     model.add(Dense(1, activation='sigmoid'))
+          
     
      # compile the model
      model.compile(SGD(learning_rate=0.01, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
