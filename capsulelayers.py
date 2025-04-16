@@ -97,8 +97,8 @@ class CapsuleLayer(layers.Layer):
 
     def build(self, input_shape):
         assert len(input_shape) >= 3, "The input Tensor should have shape=[None, input_num_capsule, input_dim_capsule]"
-        self.input_num_capsule = input_shape[1]
-        self.input_dim_capsule = input_shape[2]
+        self.input_num_capsule = int(input_shape[1])
+        self.input_dim_capsule = int(input_shape[2])
 
         # Transform matrix, from each input capsule to each output capsule, there's a unique weight as in Dense layer.
         self.W = self.add_weight(shape=[self.num_capsule, self.input_num_capsule,
@@ -128,7 +128,15 @@ class CapsuleLayer(layers.Layer):
         # Begin: Routing algorithm ---------------------------------------------------------------------#
         # The prior for coupling coefficient, initialized as zeros.
         # b.shape = [None, self.num_capsule, 1, self.input_num_capsule].
-        b = tf.zeros(shape=[inputs.shape[0], self.num_capsule, 1, self.input_num_capsule])
+
+
+
+        #b = tf.zeros(shape=[inputs.shape[0], self.num_capsule, 1, self.input_num_capsule])
+        b = tf.zeros(shape=[tf.shape(inputs)[0], self.num_capsule, 1, self.input_num_capsule])
+
+
+
+
 
         assert self.routings > 0, 'The routings should be > 0.'
         for i in range(self.routings):

@@ -8,101 +8,121 @@ from tensorflow.keras.layers import Dense, Flatten
 from tensorflow.keras.layers import Conv2D, MaxPool2D
 from tensorflow.keras.optimizers import SGD
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
-
+import tensorflow as tf
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve, auc
 
 # the size of the images in the PCAM dataset
 IMAGE_SIZE = 96
+
 def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
+    # dataset parameters
+    TRAIN_PATH = os.path.join(base_dir, 'train+val', 'train')
+    VALID_PATH = os.path.join(base_dir, 'train+val', 'valid')
+    RESCALING_FACTOR = 1./255
 
-     # dataset parameters
-     TRAIN_PATH = os.path.join(base_dir, 'train+val', 'train')
-     VALID_PATH = os.path.join(base_dir, 'train+val', 'valid')
-     RESCALING_FACTOR = 1./255
-     
-     # instantiate data generators
-     datagen = ImageDataGenerator(rescale=RESCALING_FACTOR)
+    # instantiate data generators
+    datagen = ImageDataGenerator(rescale=RESCALING_FACTOR)
 
-     train_gen = datagen.flow_from_directory(TRAIN_PATH,
-                                             target_size=(IMAGE_SIZE, IMAGE_SIZE),
-                                             batch_size=train_batch_size,
-                                             class_mode='binary')
+    train_gen = datagen.flow_from_directory(
+        TRAIN_PATH,
+        target_size=(IMAGE_SIZE, IMAGE_SIZE),
+        batch_size=train_batch_size,
+        class_mode='binary'
+    )
 
-     val_gen = datagen.flow_from_directory(VALID_PATH,
-                                             target_size=(IMAGE_SIZE, IMAGE_SIZE),
-                                             batch_size=val_batch_size,
-                                             class_mode='binary',
-                                             shuffle=False)
-     
-     return train_gen, val_gen
+    val_gen = datagen.flow_from_directory(
+        VALID_PATH,
+        target_size=(IMAGE_SIZE, IMAGE_SIZE),
+        batch_size=val_batch_size,
+        class_mode='binary',
+        shuffle=False
+    )
+
+    return train_gen, val_gen
+
 def get_model(kernel_size=(3,3), pool_size=(4,4), first_filters=32, second_filters=64):
-     from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout, BatchNormalization
-     from keras.optimizers import SGD
 
+
+     # build the model
      model = Sequential()
 
-     # First Convolutional Block
-     model.add(Conv2D(64, (3, 3), activation='relu', padding='same', input_shape=(IMAGE_SIZE, IMAGE_SIZE, 3)))
-     model.add(BatchNormalization())
-     model.add(MaxPooling2D(pool_size=(2, 2)))
+     model.add(Conv2D(first_filters, kernel_size, activation = 'relu', padding = 'same', input_shape = (IMAGE_SIZE, IMAGE_SIZE, 3)))
+     model.add(MaxPool2D(pool_size = pool_size))
 
-     # Second Convolutional Block
-     model.add(Conv2D(128, (3, 3), activation='relu', padding='same'))
-     model.add(BatchNormalization())
-     model.add(MaxPooling2D(pool_size=(2, 2)))
+     model.add(Conv2D(second_filters, kernel_size, activation = 'relu', padding = 'same'))
+     model.add(MaxPool2D(pool_size = pool_size))
 
-     # Third Convolutional Block
-     model.add(Conv2D(256, (3, 3), activation='relu', padding='same'))
-     model.add(BatchNormalization())
-     model.add(MaxPooling2D(pool_size=(2, 2)))
+     model.add(Conv2D(second_filters, kernel_size, activation = 'relu', padding = 'same'))
+     model.add(MaxPool2D(pool_size = pool_size))
 
-     # Fourth Convolutional Block
-     model.add(Conv2D(512, (3, 3), activation='relu', padding='same'))
-     model.add(BatchNormalization())
-     model.add(MaxPooling2D(pool_size=(2, 2)))
-
-     # Flatten and Dense Layers
      model.add(Flatten())
-     model.add(Dense(1024, activation='relu'))
-     model.add(Dropout(0.5))
-     model.add(Dense(512, activation='relu'))
-     model.add(Dropout(0.5))
-     model.add(Dense(1, activation='sigmoid'))
-          
-    
+     model.add(Dense(64, activation = 'relu'))
+     model.add(Dense(1, activation = 'sigmoid'))
+
+
      # compile the model
      model.compile(SGD(learning_rate=0.01, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
 
      return model
+
 # get the model
 model = get_model()
 
-# get the data generators
+# Compute and output the number of trainable parameters.
+# This sums up the parameters for each trainable weight tensor.
+trainable_params = np.sum([tf.keras.backend.count_params(w) for w in model.trainable_weights])
+print("Number of trainable parameters: {:,}".format(trainable_params))
 
-#train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/10perc/')                  #10% of data
-#train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/20perc/')                  #20% of data
-train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/vladisacuck/MIA/MIA/pcam/') #30% of data
+# get the data generators
+#train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/10perc/')  # Change path as needed
+# Alternative generators (uncomment as needed):
+train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/20perc/')
+#train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/vladisacuck/MIA/MIA/pcam/')
+
 # save the model and weights
-model_name = 'my_first_cnn_model'
+model_name = 'my_first_capsnet30%_model'
 model_filepath = model_name + '.json'
 weights_filepath = model_name + '_weights.keras'
 
-model_json = model.to_json() # serialize model to JSON
+model_json = model.to_json()  # serialize model to JSON
 with open(model_filepath, 'w') as json_file:
-    json_file.write(model_json) 
+    json_file.write(model_json)
 
-
-# define the model checkpoint and Tensorboard callbacks
+# define the model checkpoint and TensorBoard callbacks
 checkpoint = ModelCheckpoint(weights_filepath, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 tensorboard = TensorBoard(os.path.join('logs', model_name))
 callbacks_list = [checkpoint, tensorboard]
 
-
 # train the model
-train_steps = train_gen.n//train_gen.batch_size
-val_steps = val_gen.n//val_gen.batch_size
+train_steps = train_gen.n // train_gen.batch_size
+val_steps = val_gen.n // val_gen.batch_size
 
-history = model.fit(train_gen, steps_per_epoch=train_steps, 
-                    validation_data=val_gen,
-                    validation_steps=val_steps,
-                    epochs=10,
-                    callbacks=callbacks_list)
+history = model.fit(
+    train_gen,
+    steps_per_epoch=train_steps,
+    validation_data=val_gen,
+    validation_steps=val_steps,
+    epochs=6,
+    callbacks=callbacks_list
+)
+y_true = val_gen.labels
+y_pred_prob = model.predict(val_gen, steps=val_steps)
+y_pred_prob = y_pred_prob.flatten()
+
+# Compute ROC curve and AUC
+fpr, tpr, thresholds = roc_curve(y_true, y_pred_prob)
+roc_auc = auc(fpr, tpr)
+print("model AUC score:", roc_auc)
+
+# Create the ROC plot
+plt.figure()
+plt.plot(fpr, tpr, label=f'ROC curve (AUC = {roc_auc:.2f})')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Receiver Operating Characteristic (ROC) Curve')
+plt.legend(loc='lower right')
+
+# Save the figure to a PNG file instead of calling plt.show()
+plt.savefig("roc_30%.png", dpi=300)
+plt.close()
