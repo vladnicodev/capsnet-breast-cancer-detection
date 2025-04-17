@@ -1,1 +1,1 @@
-# 8p361-project-imaging
+This GitHub repository contains the code used to perform our research. We compared capsule networks and cnns of 10%, 20% and 30% of the total data due to too high system requirements. We have also uploaded the script that we used for data minimization.
