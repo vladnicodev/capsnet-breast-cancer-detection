@@ -67,13 +67,7 @@ def CapsNet(input_shape, n_class, routings, batch_size):
     train_model = models.Model([x, y], [out_caps, decoder(masked_by_y)])
     eval_model = models.Model(x, [out_caps, decoder(masked)])
 
-    # Manipulate model (for exploring capsule outputs)
-    noise = layers.Input(shape=(n_class, 16))
-    noised_digitcaps = layers.Add()([digitcaps, noise])
-    masked_noised_y = Mask()([noised_digitcaps, y])
-    manipulate_model = models.Model([x, y, noise], decoder(masked_noised_y))
-
-    return train_model, eval_model, manipulate_model
+    return train_model, eval_model
 
 
 def margin_loss(y_true, y_pred):
@@ -101,7 +95,7 @@ def train(model, data, args):
         schedule=lambda epoch: args.lr * (args.lr_decay ** epoch))
 
     # Compile the model
-    model.compile(optimizer=optimizers.Adam(learning_rate=args.lr),
+    model.compile(optimizer=optimizers.Adam(learning_rate=args.lr), # IMPORTANT: you might need to change this depending on your machine
                   loss=[margin_loss, 'mse'],
                   loss_weights=[1., args.lam_recon],
                   metrics={'capsnet': 'accuracy'})
@@ -117,13 +111,13 @@ def train(model, data, args):
     with open(json_path, 'w') as json_file:
         json_file.write(model_json)
 
-    weights_path = os.path.join(args.save_dir, 'capsnet_model_weights2.weights.h5')
+    weights_path = os.path.join(args.save_dir, 'capsnet_model_weights2.weights.h5') # IMPORTANT: you might need to change this depending on your machine
     model.save_weights(weights_path)
 
     print(f'Model architecture saved to {json_path}')
     print(f'Model weights saved to {weights_path}')
 
-    # Optionally: plot training log (if plot_log is provided)
+    # Optionally: plot training log
     from utils import plot_log
     plot_log(os.path.join(args.save_dir, 'log.csv'), show=True)
 
@@ -135,9 +129,9 @@ def load_pcam():
     Loads training and validation data.
     """
     x_train, y_train = load_images_from_folder(
-        "/Users/vlad_/Desktop/20perc/train+val/train")
+        "/yourpathto/10perctrain+val/train") # Change to percentage of choice
     x_test, y_test = load_images_from_folder(
-        "/Users/vlad_/Desktop/20perc/train+val/valid")
+        "/yourpathto/10perc/train+val/valid")
 
     x_train = x_train.reshape(-1, 96, 96, 3).astype('float32') / 255.
     x_test = x_test.reshape(-1, 96, 96, 3).astype('float32') / 255.
@@ -190,9 +184,6 @@ if __name__ == "__main__":
     parser.add_argument('--debug', action='store_true',
                         help="Save weights by TensorBoard")
     parser.add_argument('--save_dir', default='./result')
-    # Set default test path to the desired location.
-    parser.add_argument('--test_path', default='/Users/vlad_/Desktop/testk/', type=str,
-                        help="Path to folder with test images (tif files)")
     parser.add_argument('--digit', default=5, type=int,
                         help="Digit to manipulate")
     parser.add_argument('-w', '--weights', default=None,
@@ -207,7 +198,7 @@ if __name__ == "__main__":
     (x_train, y_train), (x_test, y_test) = load_pcam()
 
     # Define the model.
-    model, eval_model, manipulate_model = CapsNet(
+    model, eval_model, _ = CapsNet(
         input_shape=x_train.shape[1:],
         n_class=len(np.unique(np.argmax(y_train, 1))),
         routings=args.routings,
@@ -240,7 +231,7 @@ if __name__ == "__main__":
     plt.savefig("roc_capsnet.png", dpi=300)
     plt.close()
     print("ROC curve saved as roc_capsnet.png")
-    # ========== Key Fixes for Submission Generation ==========
+    
     # After training
     test_files = glob.glob(os.path.join(args.test_path, '*.tif'))
     total_files = len(test_files)

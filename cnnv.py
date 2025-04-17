@@ -75,13 +75,12 @@ trainable_params = np.sum([tf.keras.backend.count_params(w) for w in model.train
 print("Number of trainable parameters: {:,}".format(trainable_params))
 
 # get the data generators
-#train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/10perc/')  # Change path as needed
-# Alternative generators (uncomment as needed):
-train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/20perc/')
-#train_gen, val_gen = get_pcam_generators('/Users/vlad_/Desktop/vladisacuck/MIA/MIA/pcam/')
+train_gen, val_gen = get_pcam_generators('/pathto/10perc/')  
+# train_gen, val_gen = get_pcam_generators('/pathto/20perc/') # Uncomment this line to use 20% of data
+# train_gen, val_gen = get_pcam_generators('/pathto/30perc/')
 
 # save the model and weights
-model_name = 'my_first_capsnet30%_model'
+model_name = 'my_cnnx%_model'
 model_filepath = model_name + '.json'
 weights_filepath = model_name + '_weights.keras'
 
@@ -124,5 +123,5 @@ plt.title('Receiver Operating Characteristic (ROC) Curve')
 plt.legend(loc='lower right')
 
 # Save the figure to a PNG file instead of calling plt.show()
-plt.savefig("roc_30%.png", dpi=300)
+plt.savefig("roc_x%.png", dpi=300)
 plt.close()
