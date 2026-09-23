@@ -25,6 +25,10 @@ We train a dynamic-routing CapsNet and two CNN baselines on 1% to 100% of the 14
 - [Research questions](#research-questions)
 - [Dataset](#dataset)
 - [Models](#models)
+- [Experimental protocol](#experimental-protocol)
+- [Reproducing the results](#reproducing-the-results)
+- [Repository layout](#repository-layout)
+- [Engineering notes](#engineering-notes)
 - [Tech stack](#tech-stack)
 - [Project history](#project-history)
 - [Authors](#authors)
@@ -85,6 +89,68 @@ flowchart LR
 ```
 
 **Adapting CapsNet to 96×96 RGB patches.** On MNIST, the original CapsNet puts a 9×9 convolution and the 9×9/2 primary-capsule convolution directly on the 28×28 image, which gives 1,152 primary capsules. On a 96×96 patch the same design yields **51,200** primary capsules and a 28M-parameter fully connected decoder. This is what made the first, TensorFlow version of this project too expensive to train on the full dataset (see [Project history](#project-history)). Here, two strided 5×5 convolutions first reduce the patch to 24×24. That brings the count down to 2,048 capsules on an 8×8 grid, and a transposed-convolution decoder replaces the 28M-parameter FC decoder. Routing runs in float32 with gradients through the final iteration only (the other iterations only set the coupling coefficients), and the margin loss uses the paper's m⁺ = 0.9, m⁻ = 0.1, λ = 0.5.
+
+## Experimental protocol
+
+- **Identical training recipe for every model.** 8,000 optimiser steps of batch 128, AdamW (lr 1e-3, weight decay 1e-4), 250 warm-up steps followed by cosine decay, and bfloat16 autocast. A fixed *step* budget, rather than a fixed number of epochs, means small training sets are not also under-trained: 8,000 steps are ≈ 7 epochs of the full set and ≈ 711 epochs of the 1% subset.
+- **Augmentation.** Each patch gets a random element of the dihedral group D4 (the 4 right-angle rotations × horizontal flip). These are exact symmetries of histology patches. Nothing else is used, so rotations by other angles, zoom, blur and stain changes stay *unseen* for RQ2.
+- **Losses.** Binary cross-entropy for the CNNs. For CapsNet, margin loss plus 0.392 × pixel-wise MSE of the reconstruction; 0.392 is the reconstruction weight of the original Keras implementation.
+- **Model selection and testing.** Validation ROC-AUC is computed every 50 steps for the first 1,000 steps, because models trained on small subsets peak early, and every 200 steps after that. The best checkpoint is kept. It is then evaluated **once** on the untouched 8,000-patch test half.
+- **Seeds.** 3 seeds per configuration. The seed controls the training subset, weight initialisation, batch order and augmentation. Results are reported as mean ± standard deviation.
+- **Threshold metrics.** Accuracy, sensitivity, specificity and F1 are computed at p = 0.5. For CapsNet this is equivalent to predicting the class with the longer capsule.
+- **Hardware.** One NVIDIA RTX 5080 (16 GB), PyTorch 2.11, CUDA 12.8. Each run takes 1–2 minutes including evaluation.
+
+## Reproducing the results
+
+**1. Install** (Python ≥ 3.10). Install the PyTorch build for your platform first ([pytorch.org](https://pytorch.org/get-started/locally/)). RTX 50-series (Blackwell) GPUs need a CUDA 12.8+ build.
+
+```bash
+git clone https://github.com/vladnicodev/capsnet-breast-cancer-detection.git
+cd capsnet-breast-cancer-detection
+python -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+pip install torch --index-url https://download.pytorch.org/whl/cu128
+pip install -e ".[dev]"
+pytest -q                                              # 29 unit tests, CPU only, ~5 s
+```
+
+**2. Get the data.** Arrange the PCam patches in this folder layout (`train+val/train/{0,1}/*.jpg`, `train+val/valid/{0,1}/*.jpg`), then decode it once into NumPy arrays (~1.5 min, 4.4 GB):
+
+```bash
+python -m capsnet_pcam.prepare_data --src /path/to/pcam --out data/pcam
+```
+
+**3. Train a model:**
+
+```bash
+python -m capsnet_pcam.train --model capsnet --fraction 0.1 --seed 0
+```
+
+Every training option is a command-line flag (`python -m capsnet_pcam.train --help`), e.g. `--routings`, `--recon-weight`, `--steps`, `--no-augment`, `--no-amp`. Each run writes `config.json`, `history.csv` (validation curve), `metrics.json`, `test_scores.npz` and `best.pt` to `runs/<model>/frac<f>/seed<s>/`.
+
+## Repository layout
+
+```
+├── src/capsnet_pcam/
+│   ├── models/
+│   │   ├── capsules.py      # squash, primary capsules, dynamic routing, margin loss
+│   │   ├── capsnet.py       # CapsNet + reconstruction decoder
+│   │   └── cnn.py           # Simple CNN baseline and parameter-matched CNN
+│   ├── data.py              # JPEG → .npy caching, stratified nested subsets, GPU batching, D4 augmentation
+│   ├── perturbations.py     # rotation, zoom, blur and H&E stain shifts for robustness tests
+│   ├── metrics.py           # ROC-AUC, accuracy, sensitivity, specificity, F1
+│   ├── train.py             # training loop, checkpoint selection, evaluation   (CLI)
+│   └── prepare_data.py      # one-off dataset caching                           (CLI)
+├── tests/                   # pytest suite: capsule maths, models, data pipeline, metrics
+└── .github/workflows/ci.yml # lint + tests on every push
+```
+
+## Engineering notes
+
+- **The data pipeline is built for throughput.** The 160k JPEGs are decoded once, with 16 threads, into a uint8 array. Training keeps that array **on the GPU** (4.4 GB) and draws batches by indexing, and the random D4 augmentation also runs on the GPU. No `DataLoader` workers are needed and data loading costs almost nothing, so at batch 128 the CNNs train at 170–240 steps/s and the CapsNet at about 120.
+- **Numerics.** Convolutions run in bfloat16 autocast on channels-last tensors. The capsule layers are kept in float32 as a precaution, because iterated softmax/squash updates can be sensitive to bf16 rounding.
+- **The experiments are controlled.** The baseline is parameter-matched. Every model uses the same optimiser, schedule, step budget and augmentation. Subsets are nested and stratified, and model selection (validation) is separated from reporting (test).
+- **Tested and linted.** 29 `pytest` tests cover the capsule maths (squash bounds and direction, coupling behaviour, gradient flow, margin loss), model interfaces, parameter matching, subset nesting and stratification, augmentation correctness, perturbations and the caching round trip. GitHub Actions runs `ruff` and the tests on Python 3.10 and 3.12.
+- **Self-describing runs.** Every run stores its full config, learning curve, test scores and checkpoint.
 
 ## Tech stack
 
