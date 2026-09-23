@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "Capsule Networks vs. CNNs for Breast Cancer Metastasis Detection on PatchCamelyon"
+authors:
+  - family-names: Nicolescu
+    given-names: Vlad A.
+    alias: vladnicodev
+  - family-names: Barbulescu
+    given-names: Vlad
+    alias: vladaunski
+  - family-names: Pavel
+    given-names: Andrei
+    alias: gunbreaker17
+version: 1.0.0
+date-released: 2026-09-23
+license: MIT
+repository-code: "https://github.com/vladnicodev/capsnet-breast-cancer-detection"
+keywords:
+  - capsule networks
+  - convolutional neural networks
+  - histopathology
+  - breast cancer
+  - PatchCamelyon
+  - medical imaging
